@@ -1,0 +1,13 @@
+{
+  "members": [
+    { "id": 1, "name": "Người 1" },
+    { "id": 2, "name": "Người 2" },
+    { "id": 3, "name": "Người 3" },
+    { "id": 4, "name": "Người 4" },
+    { "id": 5, "name": "Người 5" }
+  ],
+  "currentRound": 1,
+  "currentIndex": 0,
+  "history": [],
+  "reminderCount": 0
+}

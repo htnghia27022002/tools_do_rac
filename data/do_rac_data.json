@@ -1,0 +1,40 @@
+{
+  "members": [
+    {
+      "id": 1,
+      "name": "Khánh"
+    },
+    {
+      "id": 2,
+      "name": "Mạnh"
+    },
+    {
+      "id": 3,
+      "name": "Phước Nghĩa"
+    },
+    {
+      "id": 4,
+      "name": "Nghĩa"
+    },
+    {
+      "id": 5,
+      "name": "Duyễn"
+    },
+    {
+      "id": 6,
+      "name": "Huy"
+    },
+    {
+      "id": 7,
+      "name": "Hoàng Anh"
+    }
+  ],
+  "currentRound": 1,
+  "history": [],
+  "selectedPerson": {
+    "id": 1,
+    "name": "Khánh"
+  },
+  "reminderCount": 12,
+  "isWaitingConfirm": true
+}
