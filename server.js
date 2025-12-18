@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 3001;
+const PORT = 80;
 
 // Path to data file - TẤT CẢ DATA LƯU Ở ĐÂY
 const DATA_FILE = path.join(__dirname, 'data', 'do_rac_data.json');
