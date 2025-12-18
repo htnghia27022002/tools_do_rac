@@ -1,0 +1,24 @@
+{
+  "name": "tools_do_rac",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/htnghia27022002/tools_do_rac.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/htnghia27022002/tools_do_rac/issues"
+  },
+  "homepage": "https://github.com/htnghia27022002/tools_do_rac#readme",
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

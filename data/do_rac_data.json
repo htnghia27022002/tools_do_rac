@@ -5,10 +5,6 @@
       "name": "Khánh"
     },
     {
-      "id": 2,
-      "name": "Mạnh"
-    },
-    {
       "id": 3,
       "name": "Phước Nghĩa"
     },
@@ -29,12 +25,73 @@
       "name": "Hoàng Anh"
     }
   ],
-  "currentRound": 1,
-  "history": [],
+  "currentRound": 2,
+  "history": [
+    {
+      "memberId": 4,
+      "memberName": "Nghĩa",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:54:14.400Z"
+    },
+    {
+      "memberId": 4,
+      "memberName": "Nghĩa",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:54:20.356Z"
+    },
+    {
+      "memberId": 1,
+      "memberName": "Khánh",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:54:29.070Z"
+    },
+    {
+      "memberId": 6,
+      "memberName": "Huy",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:54:35.749Z"
+    },
+    {
+      "memberId": 5,
+      "memberName": "Duyễn",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:54:41.379Z"
+    },
+    {
+      "memberId": 4,
+      "memberName": "Nghĩa",
+      "round": 1,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T10:58:29.175Z"
+    },
+    {
+      "memberId": 6,
+      "memberName": "Huy",
+      "round": 2,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T11:02:21.404Z"
+    },
+    {
+      "memberId": 6,
+      "memberName": "Huy",
+      "round": 2,
+      "reminderCount": 0,
+      "timestamp": "2025-12-18T11:02:27.740Z"
+    }
+  ],
   "selectedPerson": {
-    "id": 1,
-    "name": "Khánh"
+    "id": 7,
+    "name": "Hoàng Anh"
   },
-  "reminderCount": 12,
-  "isWaitingConfirm": true
+  "reminderCount": 0,
+  "isWaitingConfirm": true,
+  "onlineUsers": [
+    "aa"
+  ],
+  "isRolling": false
 }
