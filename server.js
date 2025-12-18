@@ -8,7 +8,7 @@ const PORT = 80;
 const DATA_FILE = path.join(__dirname, 'data', 'do_rac_data.json');
 
 // Webhook URL
-const WEBHOOK_URL = 'https://open.larksuite.com/open-apis/bot/v2/hook/278e0d3e-42e7-4737-85de-14014f851e8f';
+const WEBHOOK_URL = 'https://open.larksuite.com/open-apis/bot/v2/hook/84a86967-7195-46a9-87dc-18481e830f2e';
 
 // Default data
 const DEFAULT_DATA = {
