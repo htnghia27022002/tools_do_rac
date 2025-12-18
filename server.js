@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
 const PORT = 80;
 
@@ -23,7 +24,9 @@ const DEFAULT_DATA = {
     history: [],
     selectedPerson: null,
     reminderCount: 0,
-    isWaitingConfirm: false
+    isWaitingConfirm: false,
+    isRolling: false, // Đang trong quá trình quay
+    onlineUsers: [] // Danh sách người đang online
 };
 
 // Đọc data từ file
@@ -161,6 +164,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/data' && method === 'POST') {
         const body = await parseBody(req);
         writeData(body);
+        broadcast({ type: 'dataUpdate', data: body });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
         return;
@@ -184,6 +188,7 @@ const server = http.createServer(async (req, res) => {
             // Tăng số lần nhắc
             data.reminderCount = (data.reminderCount || 0) + 1;
             writeData(data);
+            broadcast({ type: 'dataUpdate', data: data });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
@@ -196,6 +201,7 @@ const server = http.createServer(async (req, res) => {
             const data = readData();
             data.reminderCount = (data.reminderCount || 0) + 1;
             writeData(data);
+            broadcast({ type: 'dataUpdate', data: data });
             
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
@@ -237,8 +243,10 @@ const server = http.createServer(async (req, res) => {
         data.selectedPerson = null;
         data.reminderCount = 0;
         data.isWaitingConfirm = false;
+        data.isRolling = false;
 
         writeData(data);
+        broadcast({ type: 'dataUpdate', data: data });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
@@ -246,6 +254,7 @@ const server = http.createServer(async (req, res) => {
             message: `${currentPerson.name} đã hoàn thành!`,
             data: data
         }));
+        broadcast({ type: 'completed', person: currentPerson.name });
         return;
     }
 
@@ -257,15 +266,92 @@ const server = http.createServer(async (req, res) => {
         data.selectedPerson = null;
         data.reminderCount = 0;
         data.isWaitingConfirm = false;
+        data.isRolling = false;
         writeData(data);
+        broadcast({ type: 'dataUpdate', data: data });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, data: data }));
         return;
     }
 
+    // POST /api/roll - Quay người (với loại trừ người đang xem)
+    if (url === '/api/roll' && method === 'POST') {
+        const body = await parseBody(req);
+        const currentViewer = body.viewer; // Người đang xem
+        const data = readData();
+
+        if (!data.members || data.members.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Chưa có thành viên' }));
+            return;
+        }
+
+        if (data.isWaitingConfirm) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Phải xác nhận người hiện tại trước' }));
+            return;
+        }
+
+        // Kiểm tra có ai đang quay không
+        if (data.isRolling) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Có người đang quay, vui lòng đợi!' }));
+            return;
+        }
+
+        // Set isRolling = true và broadcast
+        data.isRolling = true;
+        writeData(data);
+        broadcast({ type: 'dataUpdate', data: data });
+
+        // Lọc ra danh sách có thể bị quay (loại trừ người đang xem)
+        let eligibleMembers = data.members;
+        if (currentViewer) {
+            eligibleMembers = data.members.filter(m => m.name !== currentViewer);
+        }
+
+        if (eligibleMembers.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Không có thành viên nào khác để quay' }));
+            return;
+        }
+
+        // Random chọn người
+        const randomIndex = Math.floor(Math.random() * eligibleMembers.length);
+        const selectedPerson = eligibleMembers[randomIndex];
+
+        // Cập nhật data
+        data.selectedPerson = selectedPerson;
+        data.isWaitingConfirm = true;
+        data.reminderCount = 0;
+        writeData(data);
+
+        // Broadcast rolling animation
+        broadcast({ type: 'rolling', eligibleMembers: eligibleMembers, selectedPerson: selectedPerson });
+
+        // Sau 3 giây broadcast kết quả và reset isRolling
+        setTimeout(() => {
+            const currentData = readData();
+            currentData.isRolling = false;
+            writeData(currentData);
+            broadcast({ type: 'rollResult', data: currentData, selectedPerson: selectedPerson });
+        }, 3000);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, data: data, selectedPerson: selectedPerson }));
+        return;
+    }
+
     // ========== STATIC FILES ==========
-    let filePath = path.join(__dirname, 'public', url === '/' ? 'index.html' : url);
+    // Redirect root to login if not authenticated (this will be handled by client-side)
+    let filePath;
+    if (url === '/') {
+        filePath = path.join(__dirname, 'public', 'index.html');
+    } else {
+        filePath = path.join(__dirname, 'public', url);
+    }
+    
     const ext = path.extname(filePath);
     const contentType = CONTENT_TYPES[ext] || 'text/plain';
 
@@ -279,6 +365,79 @@ const server = http.createServer(async (req, res) => {
         }
     });
 });
+
+// ========== WEBSOCKET ==========
+const wss = new WebSocket.Server({ server });
+
+// Lưu kết nối WebSocket với thông tin user
+const clients = new Map(); // Map<ws, {username: string, id: string}>
+
+wss.on('connection', (ws) => {
+    console.log('New WebSocket connection');
+    
+    ws.on('message', (message) => {
+        try {
+            const msg = JSON.parse(message);
+            
+            if (msg.type === 'login') {
+                // User đăng nhập
+                const userId = generateId();
+                clients.set(ws, { username: msg.username, id: userId });
+                
+                // Cập nhật online users
+                const data = readData();
+                data.onlineUsers = Array.from(clients.values()).map(c => c.username);
+                writeData(data);
+                
+                // Gửi data đầu tiên cho user
+                ws.send(JSON.stringify({ type: 'init', data: data, userId: userId }));
+                
+                // Broadcast online users
+                broadcast({ type: 'onlineUsers', users: data.onlineUsers });
+                
+                console.log(`User logged in: ${msg.username}`);
+            }
+        } catch (error) {
+            console.error('WebSocket message error:', error);
+        }
+    });
+    
+    ws.on('close', () => {
+        // User disconnect
+        const user = clients.get(ws);
+        if (user) {
+            console.log(`User disconnected: ${user.username}`);
+            clients.delete(ws);
+            
+            // Cập nhật online users
+            const data = readData();
+            data.onlineUsers = Array.from(clients.values()).map(c => c.username);
+            writeData(data);
+            
+            // Broadcast online users
+            broadcast({ type: 'onlineUsers', users: data.onlineUsers });
+        }
+    });
+    
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
+});
+
+// Broadcast message to all clients
+function broadcast(message) {
+    const messageStr = JSON.stringify(message);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(messageStr);
+        }
+    });
+}
+
+// Generate unique ID
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
 
 server.listen(PORT, '0.0.0.0', () => {
     const os = require('os');
@@ -306,5 +465,6 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('📁 Data lưu tại: ' + DATA_FILE);
     console.log('');
     console.log('💡 Nhấn Ctrl+C để dừng server');
+    console.log('🔌 WebSocket enabled for real-time updates');
     console.log('');
 });

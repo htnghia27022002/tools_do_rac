@@ -18,34 +18,68 @@
         }
         
         .dice-container {
-            perspective: 1000px;
-            height: 150px;
+            perspective: 2000px;
+            height: 200px;
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         }
         
         .dice {
             font-size: 100px;
             cursor: pointer;
-            transition: transform 0.1s;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
             user-select: none;
+            position: relative;
+            display: inline-block;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
         }
         
         .dice:hover {
-            transform: scale(1.1);
+            transform: scale(1.15) translateY(-5px);
+            filter: drop-shadow(0 15px 30px rgba(0,0,0,0.4));
         }
         
         .dice.rolling {
-            animation: roll 0.5s ease-in-out infinite;
+            animation: roll3d 0.15s ease-in-out infinite, bounce 0.6s ease-in-out infinite;
         }
         
-        @keyframes roll {
-            0% { transform: rotate(0deg) scale(1); }
-            25% { transform: rotate(90deg) scale(1.2); }
-            50% { transform: rotate(180deg) scale(1); }
-            75% { transform: rotate(270deg) scale(1.2); }
-            100% { transform: rotate(360deg) scale(1); }
+        @keyframes roll3d {
+            0% { 
+                transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
+            }
+            25% { 
+                transform: rotateX(90deg) rotateY(180deg) rotateZ(90deg) scale(1.1);
+            }
+            50% { 
+                transform: rotateX(180deg) rotateY(360deg) rotateZ(180deg) scale(1.2);
+            }
+            75% { 
+                transform: rotateX(270deg) rotateY(540deg) rotateZ(270deg) scale(1.1);
+            }
+            100% { 
+                transform: rotateX(360deg) rotateY(720deg) rotateZ(360deg) scale(1);
+            }
+        }
+        
+        @keyframes bounce {
+            0%, 100% { 
+                transform: translateY(0px);
+                filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+            }
+            25% {
+                transform: translateY(-40px);
+                filter: drop-shadow(0 50px 40px rgba(0,0,0,0.2));
+            }
+            50% { 
+                transform: translateY(-60px);
+                filter: drop-shadow(0 70px 50px rgba(0,0,0,0.15));
+            }
+            75% {
+                transform: translateY(-40px);
+                filter: drop-shadow(0 50px 40px rgba(0,0,0,0.2));
+            }
         }
         
         .selected-person {
@@ -162,6 +196,23 @@
 </head>
 <body>
     <div class="container py-4">
+        <!-- User Info Bar -->
+        <div class="alert alert-info mb-3 d-flex justify-content-between align-items-center">
+            <div>
+                <i class="fas fa-user-circle me-2"></i>
+                <strong id="currentUsername">...</strong>
+            </div>
+            <div>
+                <span class="badge bg-success me-2">
+                    <i class="fas fa-circle me-1"></i>
+                    <span id="onlineCount">0</span> Online
+                </span>
+                <button class="btn btn-sm btn-outline-danger" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i>Đăng xuất
+                </button>
+            </div>
+        </div>
+        
         <h1 class="text-center text-white mb-4 animate__animated animate__bounceInDown">
             🎲 Lắc Xí Ngầu Đổ Rác 🗑️
         </h1>
@@ -169,6 +220,18 @@
         <!-- Server Status -->
         <div id="serverStatus" class="alert alert-success text-center mb-4">
             <i class="fas fa-circle-check me-2"></i>Đang kết nối...
+        </div>
+        
+        <!-- Online Users -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h6 class="mb-2">
+                    <i class="fas fa-users me-2"></i>Người đang xem:
+                </h6>
+                <div id="onlineUsersList" class="d-flex flex-wrap gap-2">
+                    <span class="badge bg-secondary">Đang tải...</span>
+                </div>
+            </div>
         </div>
         
         <!-- Main Dice Card -->
@@ -294,21 +357,135 @@
             history: [],
             selectedPerson: null,  // Người đang được chọn
             reminderCount: 0,
-            isWaitingConfirm: false  // Đang chờ xác nhận
+            isWaitingConfirm: false,  // Đang chờ xác nhận
+            onlineUsers: []
         };
         
         const diceEmojis = ['🎲', '🎯', '🎰', '🎱', '🎪', '🎭'];
+        let ws = null;
+        let currentUsername = '';
+        let userId = '';
+        let isRolling = false; // Flag để tránh double roll
         
         // Load data khi mở trang
         document.addEventListener('DOMContentLoaded', () => {
-            loadData();
-            setInterval(loadData, 10000);
+            // Check if logged in
+            currentUsername = sessionStorage.getItem('username');
+            if (!currentUsername) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            // Display username
+            document.getElementById('currentUsername').textContent = currentUsername;
+            
+            // Connect WebSocket
+            connectWebSocket();
             
             // Enter key để thêm member
             document.getElementById('newMemberName').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') addMember();
             });
         });
+        
+        // ========== WEBSOCKET ==========
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateServerStatus(true, 'Đã kết nối WebSocket ✓');
+                
+                // Send login
+                ws.send(JSON.stringify({
+                    type: 'login',
+                    username: currentUsername
+                }));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                } catch (error) {
+                    console.error('WebSocket message error:', error);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateServerStatus(false, 'Lỗi WebSocket!');
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateServerStatus(false, 'Mất kết nối! Đang kết nối lại...');
+                
+                // Reconnect after 3 seconds
+                setTimeout(() => {
+                    connectWebSocket();
+                }, 3000);
+            };
+        }
+        
+        function handleWebSocketMessage(message) {
+            console.log('WebSocket message:', message);
+            
+            switch(message.type) {
+                case 'init':
+                    // Initial data
+                    data = message.data;
+                    userId = message.userId;
+                    renderAll();
+                    break;
+                    
+                case 'dataUpdate':
+                    // Data updated
+                    data = message.data;
+                    renderAll();
+                    break;
+                    
+                case 'onlineUsers':
+                    // Online users updated
+                    data.onlineUsers = message.users;
+                    renderOnlineUsers();
+                    break;
+                    
+                case 'rolling':
+                    // Rolling animation started
+                    if (!isRolling) {
+                        animateRolling(message.eligibleMembers, message.selectedPerson);
+                    }
+                    break;
+                    
+                case 'rollResult':
+                    // Roll completed
+                    data = message.data;
+                    isRolling = false;
+                    renderAll();
+                    showToast(`🎲 ${message.selectedPerson.name} được chọn đổ rác!`, 'success');
+                    break;
+                    
+                case 'completed':
+                    showToast(`✅ ${message.person} đã đổ rác xong!`, 'success');
+                    break;
+            }
+        }
+        
+        function logout() {
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+                sessionStorage.removeItem('username');
+                sessionStorage.removeItem('loginTime');
+                if (ws) {
+                    ws.close();
+                }
+                window.location.href = '/login.html';
+            }
+        }
         
         // ========== API CALLS ==========
         
@@ -317,10 +494,10 @@
                 const res = await fetch('/api/data');
                 data = await res.json();
                 renderAll();
-                updateServerStatus(true);
+                updateServerStatus(true, 'Đã kết nối ✓');
             } catch (error) {
                 console.error('Error loading data:', error);
-                updateServerStatus(false);
+                updateServerStatus(false, 'Lỗi kết nối!');
             }
         }
         
@@ -337,14 +514,14 @@
             }
         }
         
-        function updateServerStatus(connected) {
+        function updateServerStatus(connected, message) {
             const el = document.getElementById('serverStatus');
             if (connected) {
                 el.className = 'alert alert-success text-center mb-4';
-                el.innerHTML = '<i class="fas fa-circle-check me-2"></i>Đã kết nối server ✓';
+                el.innerHTML = `<i class="fas fa-circle-check me-2"></i>${message || 'Đã kết nối ✓'}`;
             } else {
                 el.className = 'alert alert-danger text-center mb-4';
-                el.innerHTML = '<i class="fas fa-circle-xmark me-2"></i>Lỗi kết nối server!';
+                el.innerHTML = `<i class="fas fa-circle-xmark me-2"></i>${message || 'Lỗi kết nối!'}`;
             }
         }
         
@@ -363,11 +540,52 @@
                 return;
             }
             
+            // Kiểm tra xem có ai đang quay không (server side check)
+            if (data.isRolling) {
+                showToast('Có người khác đang quay, vui lòng đợi!', 'warning');
+                return;
+            }
+            
+            if (isRolling) {
+                return; // Local check
+            }
+            
+            isRolling = true;
+            
+            const btnRoll = document.getElementById('btnRoll');
+            btnRoll.disabled = true;
+            btnRoll.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang quay...';
+            
+            // Call API to roll (server will handle the logic and broadcast)
+            try {
+                const res = await fetch('/api/roll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ viewer: currentUsername })
+                });
+                
+                const result = await res.json();
+                
+                if (!result.success) {
+                    showToast(result.error || 'Có lỗi xảy ra!', 'danger');
+                    isRolling = false;
+                    btnRoll.disabled = false;
+                    btnRoll.innerHTML = '<i class="fas fa-dice me-2"></i>LẮC XÍ NGẦU';
+                }
+                // If success, WebSocket will handle the animation and result
+            } catch (error) {
+                console.error('Roll error:', error);
+                showToast('Lỗi kết nối!', 'danger');
+                isRolling = false;
+                btnRoll.disabled = false;
+                btnRoll.innerHTML = '<i class="fas fa-dice me-2"></i>LẮC XÍ NGẦU';
+            }
+        }
+        
+        // Animation function triggered by WebSocket
+        function animateRolling(eligibleMembers, finalPerson) {
             const dice = document.getElementById('dice');
             const btnRoll = document.getElementById('btnRoll');
-            
-            // Disable button
-            btnRoll.disabled = true;
             
             // Start rolling animation
             dice.classList.add('rolling');
@@ -380,10 +598,10 @@
             slotMachine.classList.remove('d-none');
             selectedNameEl.textContent = '';
             
-            // Populate slot with names
+            // Populate slot with eligible members only
             let slotHTML = '';
             for (let i = 0; i < 20; i++) {
-                const randomMember = data.members[Math.floor(Math.random() * data.members.length)];
+                const randomMember = eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)];
                 slotHTML += `<div class="slot-name">${randomMember.name}</div>`;
             }
             slotNames.innerHTML = slotHTML;
@@ -393,10 +611,6 @@
             const totalHeight = 20 * 80;
             const duration = 3000;
             const startTime = Date.now();
-            
-            // Random final person
-            const finalIndex = Math.floor(Math.random() * data.members.length);
-            const finalPerson = data.members[finalIndex];
             
             function animateSlot() {
                 const elapsed = Date.now() - startTime;
@@ -424,20 +638,14 @@
                     selectedNameEl.classList.add('animate__animated', 'animate__bounceIn');
                     setTimeout(() => selectedNameEl.classList.remove('animate__animated', 'animate__bounceIn'), 1000);
                     
-                    // Update data
-                    data.selectedPerson = finalPerson;
-                    data.isWaitingConfirm = true;
-                    data.reminderCount = 0;
-                    saveData();
-                    
                     // Show buttons
                     document.getElementById('btnRoll').classList.add('d-none');
+                    document.getElementById('btnRoll').innerHTML = '<i class="fas fa-dice me-2"></i>LẮC XÍ NGẦU';
                     document.getElementById('btnRemind').classList.remove('d-none');
                     document.getElementById('btnConfirm').classList.remove('d-none');
                     document.getElementById('reminderInfo').classList.remove('d-none');
                     
                     renderMembers();
-                    showToast(`🎲 ${finalPerson.name} được chọn đổ rác!`, 'success');
                 }
             }
             
@@ -469,25 +677,12 @@
         async function confirmDone() {
             if (!data.selectedPerson) return;
             
-            const person = data.selectedPerson;
-            
             try {
                 const res = await fetch('/api/confirm', { method: 'POST' });
                 const result = await res.json();
                 
                 if (result.success) {
-                    data = result.data;
-                    
-                    // Reset UI
-                    document.getElementById('selectedName').textContent = '???';
-                    document.getElementById('btnRoll').classList.remove('d-none');
-                    document.getElementById('btnRoll').disabled = false;
-                    document.getElementById('btnRemind').classList.add('d-none');
-                    document.getElementById('btnConfirm').classList.add('d-none');
-                    document.getElementById('reminderInfo').classList.add('d-none');
-                    
-                    renderAll();
-                    showToast(`✅ ${person.name} đã đổ rác xong!`, 'success');
+                    // WebSocket will handle UI update
                 } else {
                     showToast(result.error || 'Có lỗi!', 'danger');
                 }
@@ -562,7 +757,28 @@
             renderStats();
             renderMembers();
             renderHistory();
+            renderOnlineUsers();
             updateUIState();
+        }
+        
+        function renderOnlineUsers() {
+            const container = document.getElementById('onlineUsersList');
+            const countEl = document.getElementById('onlineCount');
+            
+            if (!data.onlineUsers || data.onlineUsers.length === 0) {
+                container.innerHTML = '<span class="badge bg-secondary">Chưa có ai online</span>';
+                countEl.textContent = '0';
+                return;
+            }
+            
+            countEl.textContent = data.onlineUsers.length;
+            
+            container.innerHTML = data.onlineUsers.map(user => {
+                const isMe = user === currentUsername;
+                return `<span class="badge ${isMe ? 'bg-primary' : 'bg-secondary'} fs-6">
+                    <i class="fas fa-user me-1"></i>${user}${isMe ? ' (Bạn)' : ''}
+                </span>`;
+            }).join('');
         }
         
         function renderStats() {
@@ -572,17 +788,28 @@
         }
         
         function updateUIState() {
+            const btnRoll = document.getElementById('btnRoll');
+            
             if (data.isWaitingConfirm && data.selectedPerson) {
                 document.getElementById('selectedName').textContent = data.selectedPerson.name;
-                document.getElementById('btnRoll').classList.add('d-none');
+                btnRoll.classList.add('d-none');
                 document.getElementById('btnRemind').classList.remove('d-none');
                 document.getElementById('btnConfirm').classList.remove('d-none');
                 document.getElementById('reminderInfo').classList.remove('d-none');
                 updateReminderBadge();
             } else {
                 document.getElementById('selectedName').textContent = '???';
-                document.getElementById('btnRoll').classList.remove('d-none');
-                document.getElementById('btnRoll').disabled = false;
+                btnRoll.classList.remove('d-none');
+                
+                // Disable button nếu có người đang quay
+                if (data.isRolling) {
+                    btnRoll.disabled = true;
+                    btnRoll.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang quay...';
+                } else {
+                    btnRoll.disabled = false;
+                    btnRoll.innerHTML = '<i class="fas fa-dice me-2"></i>LẮC XÍ NGẦU';
+                }
+                
                 document.getElementById('btnRemind').classList.add('d-none');
                 document.getElementById('btnConfirm').classList.add('d-none');
                 document.getElementById('reminderInfo').classList.add('d-none');
